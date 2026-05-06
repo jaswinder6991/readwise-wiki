@@ -41,7 +41,8 @@ time the pipeline runs.
 
 To make persistent improvements:
 
-- Edit topics, highlights, and topic-graph edges through the Django admin at `/admin/`.
+- Edit topics, highlights, and topic-graph edges through the Django admin at `/admin/`
+  (you'll need a superuser — `python manage.py createsuperuser` — the first time).
 - For structural changes (renaming the topic schema, changing the writer template,
   adjusting classification prompts), commit code changes — the relevant code lives in
   `wiki/services/` and `wiki/models.py`.

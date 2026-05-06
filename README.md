@@ -9,6 +9,27 @@ and incrementally maintained.
 
 ---
 
+## What this demonstrates
+
+End-to-end ownership of a Postgres-backed LLM pipeline:
+
+- **Batched LLM classification** with JSON-mode responses, prompt design that keeps topic
+  names canonical, and graceful handling of hallucinated refs.
+- **`rapidfuzz`-based topic deduplication** so "Decision Making" / "Decision-making" /
+  "Decisions" collapse to one canonical Topic before the wiki fragments.
+- **A topic graph that emerges from classification consensus** — related-topic edges
+  aggregated across calls, rendered as `[[Wikilinks]]`.
+- **Threshold-gated topic-summary regeneration** — overviews only re-render once enough new
+  evidence accumulates, saving tokens and keeping pages stable.
+- **First-class LLM observability** — every call writes an `LLMCall` row (model, prompt /
+  completion tokens, latency, batch FK, estimated USD), browsable in the Django admin.
+- **Provider-agnostic LLM client** — OpenAI-compatible, points at OpenAI / OpenRouter /
+  Together / vLLM by changing `LLM_BASE_URL`.
+- **Production-shaped infrastructure** — Postgres, Celery + Redis (sync + classify +
+  summarize + write run as separate, schedulable, retriable tasks), docker-compose, CI.
+
+---
+
 ## Why this stack
 
 The pipeline is fundamentally a fetch → classify → write-files loop. The choice of
@@ -98,10 +119,14 @@ its keep.
 cp .env.example .env   # then fill in READWISE_TOKEN, LLM_API_KEY, LLM_MODEL
 docker compose up -d
 
-# 2. Initialize the wiki output directory
+# 2. (Optional) Create an admin user so you can browse highlights, topics, and
+#    LLMCall telemetry at http://localhost:8000/admin/
+docker compose exec web python manage.py createsuperuser
+
+# 3. Initialize the wiki output directory
 docker compose exec web python manage.py init_wiki
 
-# 3. Sync highlights → classify → write wiki (runs inline)
+# 4. Sync highlights → classify → write wiki (runs inline)
 docker compose exec web python manage.py sync_readwise
 
 # Or run async via Celery:

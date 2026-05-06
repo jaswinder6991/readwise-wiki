@@ -38,9 +38,16 @@ class TestSyncReadwiseCommand:
             source_author="Author",
             source_url="",
         )
+        # Pre-create the highlight so we know its pk before scripting the LLM payload —
+        # don't rely on auto-increment landing at 1 in a fresh DB.
+        existing = HighlightFactory(readwise_id=1)
         fake_llm = FakeLLMClient(
             [
-                {"classifications": [{"ref": 1, "topic": "Topic A", "related_topics": []}]},
+                {
+                    "classifications": [
+                        {"ref": existing.id, "topic": "Topic A", "related_topics": []}
+                    ]
+                },
                 {"overview": "A short overview."},
             ]
         )
@@ -51,10 +58,6 @@ class TestSyncReadwiseCommand:
             patch("wiki.management.commands.sync_readwise.LLMClient", return_value=fake_llm),
         ):
             RWClass.return_value.export.return_value = iter([norm])
-            # The classifier reads the highlight by id, so we need to pre-create it.
-            # Instead, let ReadwiseClient yield it and have sync persist it. Then the
-            # newly created Highlight gets a fresh id; we patch the fake LLM after the fact.
-            HighlightFactory(readwise_id=1)
             call_command("sync_readwise", stdout=out)
 
         output = out.getvalue()

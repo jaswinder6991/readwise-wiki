@@ -14,11 +14,14 @@ RUN apt-get update \
       curl \
  && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml ./
-RUN pip install --upgrade pip \
- && pip install -e ".[dev]"
+RUN pip install --upgrade pip
 
+# Copy source before installing the project so setuptools' package discovery sees
+# `config/` and `wiki/` at install time. (Splitting deps from the editable install
+# would let us cache the deps layer, but that's premature optimization for a project
+# this size — correctness wins.)
 COPY . .
+RUN pip install -e ".[dev]"
 
 EXPOSE 8000
 
