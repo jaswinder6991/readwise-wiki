@@ -1,0 +1,61 @@
+{
+  "_TODO": "Synthetic fixture matching the documented /export/ schema. Re-record from a real Readwise call once the token is available — synthetic fixtures sometimes miss field shapes (nullability, pagination cursors) that bite later.",
+  "count": 4,
+  "nextPageCursor": null,
+  "results": [
+    {
+      "user_book_id": 12345,
+      "title": "Thinking, Fast and Slow",
+      "author": "Daniel Kahneman",
+      "category": "books",
+      "source_url": "https://example.com/thinking-fast-and-slow",
+      "unique_url": "",
+      "highlights": [
+        {
+          "id": 1001,
+          "text": "Nothing in life is as important as you think it is, while you are thinking about it.",
+          "note": "",
+          "location": 1234,
+          "url": null,
+          "color": "yellow",
+          "highlighted_at": "2026-01-10T09:30:00Z",
+          "tags": [{"name": "decisions"}, {"name": "psychology"}]
+        },
+        {
+          "id": 1002,
+          "text": "We can be blind to the obvious, and we are also blind to our blindness.",
+          "note": "WYSIATI",
+          "location": 1789,
+          "url": null,
+          "color": "blue",
+          "highlighted_at": "2026-01-11T14:00:00Z",
+          "tags": [{"name": "cognitive-bias"}]
+        }
+      ]
+    },
+    {
+      "user_book_id": 67890,
+      "title": "Meditations",
+      "author": "Marcus Aurelius",
+      "category": "books",
+      "source_url": "",
+      "unique_url": "https://example.com/meditations-unique",
+      "highlights": [
+        {
+          "id": 2001,
+          "text": "You have power over your mind — not outside events. Realize this, and you will find strength.",
+          "note": "",
+          "highlighted_at": "2026-02-03T11:15:00Z",
+          "tags": [{"name": "stoicism"}]
+        },
+        {
+          "id": 2002,
+          "text": "Waste no more time arguing what a good man should be. Be one.",
+          "note": "",
+          "highlighted_at": "2026-02-04T08:00:00Z",
+          "tags": []
+        }
+      ]
+    }
+  ]
+}
