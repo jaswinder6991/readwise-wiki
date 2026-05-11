@@ -1,7 +1,6 @@
 # Readwise → LLM Wiki
 
-A pipeline that ingests highlights from [Readwise](https://readwise.io) and emits a
-[Wikiwise](https://wikiwise.app)-compatible Markdown wiki — agent-readable, human-readable,
+A pipeline that ingests highlights from [Readwise](https://readwise.io) and emits a Markdown wiki — agent-readable, human-readable,
 and incrementally maintained.
 
 > **What this is:** the data ingestion + structuring engine. The wiki itself is browsed in
@@ -211,10 +210,3 @@ All config is environment-driven (see `.env.example`). Key knobs:
 | `TOPIC_FUZZY_MATCH_THRESHOLD`  | `88`                   | rapidfuzz score to merge near-duplicate topic names |
 
 ---
-
-## Roadmap
-
-- **v0.1 (this MVP)** — sync, classify, dedup, render, schedule.
-- **v0.2** — backfill embeddings on highlights for retrieval-aware classification.
-- **v0.3** — agent-driven topic merge proposals (admin action: "merge X into Y").
-- **v0.4** — incremental writer (only re-render changed topic files).

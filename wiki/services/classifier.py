@@ -131,24 +131,41 @@ class Classifier:
     # ---- Topic resolution: the load-bearing dedup logic ----
 
     def resolve_topic(self, name: str) -> Topic:
-        """Normalize → exact slug match → fuzzy match → create."""
+        """Normalize → exact slug match → fuzzy match → create. For PRIMARY topics."""
+        existing = self.lookup_topic(name)
+        if existing is not None:
+            return existing
+        canonical = self._normalize(name)
+        slug = slugify(canonical) or "untitled"
+        return Topic.objects.create(slug=slug, name=canonical)
+
+    def lookup_topic(self, name: str) -> Topic | None:
+        """Normalize → exact slug match → fuzzy match. Read-only — no creation.
+
+        Used for related-topic mentions: we only want to add a graph edge if the
+        related name resolves to a topic that already exists as a primary. LLMs
+        suggest a lot of related-topic names that nothing's actually been
+        classified into — those are noise we drop rather than materializing as
+        empty Topic rows.
+        """
         canonical = self._normalize(name)
         slug = slugify(canonical) or "untitled"
 
         existing = Topic.objects.filter(slug=slug).first()
-        if existing:
+        if existing is not None:
             return existing
 
         candidates = list(Topic.objects.values_list("name", "slug"))
-        if candidates:
-            names = [c[0] for c in candidates]
-            match = process.extractOne(canonical, names, scorer=fuzz.WRatio)
-            if match is not None:
-                _, score, idx = match
-                if score >= self.fuzzy_threshold:
-                    return Topic.objects.get(slug=candidates[idx][1])
-
-        return Topic.objects.create(slug=slug, name=canonical)
+        if not candidates:
+            return None
+        names = [c[0] for c in candidates]
+        match = process.extractOne(canonical, names, scorer=fuzz.WRatio)
+        if match is None:
+            return None
+        _, score, idx = match
+        if score >= self.fuzzy_threshold:
+            return Topic.objects.get(slug=candidates[idx][1])
+        return None
 
     # ---- Internals ----
 
@@ -203,25 +220,38 @@ class Classifier:
 
     @transaction.atomic
     def _apply(self, classifications: Iterable[HighlightClassification]) -> list[Topic]:
-        """Resolve topics, set Highlight.topic, aggregate related-topic edges."""
-        edges: dict[int, set[int]] = defaultdict(set)
+        """Two-pass: resolve all primaries first, then add graph edges between them.
+
+        Pass 1 creates a Topic row for each highlight's primary topic and assigns
+        the highlight to it.
+
+        Pass 2 walks each highlight's related-topic suggestions and adds graph
+        edges *only* between topics that already exist as primaries (lookup, not
+        create). LLM-suggested related names that don't match any primary are
+        dropped — they were noise. This keeps Topic rows 1:1 with rendered pages.
+        """
+        classifications = list(classifications)
+        primaries: dict[int, Topic] = {}
         touched_ids: set[int] = set()
         now = timezone.now()
 
+        # Pass 1: resolve and assign primary topics.
         for c in classifications:
             primary = self.resolve_topic(c.topic_name)
+            primaries[c.highlight_id] = primary
             touched_ids.add(primary.id)
-
             Highlight.objects.filter(id=c.highlight_id).update(topic=primary, classified_at=now)
 
+        # Pass 2: add edges to related topics that already exist as primaries.
+        edges: dict[int, set[int]] = defaultdict(set)
+        for c in classifications:
+            primary = primaries[c.highlight_id]
             for related_name in c.related_topic_names:
-                related = self.resolve_topic(related_name)
-                if related.id == primary.id:
+                related = self.lookup_topic(related_name)
+                if related is None or related.id == primary.id:
                     continue
-                touched_ids.add(related.id)
                 edges[primary.id].add(related.id)
 
-        # Add edges (symmetrical M:N — adding one direction is enough).
         for primary_id, related_ids in edges.items():
             primary = Topic.objects.get(id=primary_id)
             for related_id in related_ids:

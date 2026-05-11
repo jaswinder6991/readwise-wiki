@@ -52,7 +52,10 @@ class TestClassifyBatch:
         assert call.latency_ms == 123
         assert call.batch is not None
 
-    def test_aggregates_related_topic_edges(self):
+    def test_drops_related_topic_names_that_dont_match_a_primary(self):
+        # Only one primary in this batch ("Decision Making"). The related names
+        # "Psychology" and "Cognitive Bias" don't match any existing primary,
+        # so they should be dropped — not materialized as empty Topic rows.
         h = HighlightFactory(text="bridges decisions and psychology")
         llm = FakeLLMClient(
             [_classification_payload([(h.id, "Decision Making", ["Psychology", "Cognitive Bias"])])]
@@ -60,13 +63,36 @@ class TestClassifyBatch:
 
         Classifier(llm).classify_batch([h])
 
+        # Only the primary exists. No shadow topics for related-only names.
+        assert Topic.objects.count() == 1
         primary = Topic.objects.get(slug="decision-making")
-        related_names = sorted(t.name for t in primary.related_topics.all())
-        assert related_names == ["Cognitive Bias", "Psychology"]
+        assert primary.related_topics.count() == 0
 
-        # M:N is symmetrical — psychology should see decision-making in its set too.
+    def test_adds_edges_between_topics_that_are_both_primaries(self):
+        # Two highlights in the same batch — A's primary is "Decision Making" with
+        # related "Psychology"; B's primary is "Psychology" with related "Decision
+        # Making". Both topics are primaries in this batch, so the edge should form.
+        h1 = HighlightFactory(text="A decision-y highlight")
+        h2 = HighlightFactory(text="A psychology-y highlight")
+        llm = FakeLLMClient(
+            [
+                _classification_payload(
+                    [
+                        (h1.id, "Decision Making", ["Psychology"]),
+                        (h2.id, "Psychology", ["Decision Making"]),
+                    ]
+                )
+            ]
+        )
+
+        Classifier(llm).classify_batch([h1, h2])
+
+        decision_making = Topic.objects.get(slug="decision-making")
         psychology = Topic.objects.get(slug="psychology")
-        assert primary in psychology.related_topics.all()
+        assert psychology in decision_making.related_topics.all()
+        # M:N is symmetrical — the reverse edge is implicit.
+        assert decision_making in psychology.related_topics.all()
+        assert Topic.objects.count() == 2
 
     def test_empty_batch_raises(self):
         llm = FakeLLMClient([{"classifications": []}])

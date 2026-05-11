@@ -19,6 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from django.conf import settings
+from django.db.models import Count
 
 from wiki.models import Highlight, Topic
 
@@ -62,7 +63,10 @@ To make persistent improvements:
 ## Rules
 
 - Markdown only.
-- Wikilinks: `[[Topic Name]]`.
+- Cross-page links use standard Markdown: `[Topic Name](slug.md)` from a sibling
+  wiki page, or `[Topic Name](wiki/slug.md)` from `index.md` at the root. This
+  trades pure Wikiwise `[[wikilink]]` convention for clickable links in any
+  Markdown viewer (GitHub, IDE preview, etc.).
 - Don't fabricate highlights. The raw file is the ground truth.
 """
 
@@ -86,11 +90,22 @@ class WikiWriter:
             index_path.write_text(_render_empty_index())
 
     def write_all(self) -> None:
-        """Regenerate everything from the DB."""
+        """Regenerate everything from the DB.
+
+        Only topics with at least one primary highlight earn a page. Related-only
+        topics still exist as graph nodes (and can appear as `[[wikilinks]]` on other
+        pages, which dangle until the topic accumulates its own highlights — this
+        matches Karpathy/Wikiwise convention).
+        """
         self.init_skeleton()
         self._write_raw()
-        topics = list(Topic.objects.prefetch_related("highlights", "related_topics"))
-        # Remove any topic file no longer represented in the DB.
+        topics = list(
+            Topic.objects.annotate(h_count=Count("highlights"))
+            .filter(h_count__gt=0)
+            .prefetch_related("highlights", "related_topics")
+        )
+        # Remove any topic file no longer represented in the DB (or no longer
+        # qualifying for a page — e.g. a topic that lost its last highlight).
         existing_files = {p for p in self.wiki_dir.glob("*.md")}
         kept_files = set()
         for topic in topics:
@@ -139,7 +154,8 @@ class WikiWriter:
         if related:
             lines.append("## Related Topics")
             for r in related:
-                lines.append(f"- [[{r.name}]]")
+                # Standard Markdown link to peer file in wiki/ — clickable in any viewer.
+                lines.append(f"- [{r.name}]({r.slug}.md)")
             lines.append("")
 
         path.write_text("\n".join(lines))
@@ -150,7 +166,7 @@ class WikiWriter:
         if not topics:
             lines.append("_(no topics yet — run a sync)_")
         for t in topics:
-            lines.append(f"- [[{t.name}]]")
+            lines.append(f"- [{t.name}](wiki/{t.slug}.md)")
         lines.append("")
         lines.append("## Instructions for Agent")
         lines.append("See [CLAUDE.md](CLAUDE.md).")

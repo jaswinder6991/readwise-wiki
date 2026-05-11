@@ -48,27 +48,54 @@ class TestWriteAll:
         assert "Memento mori." in page
         assert "*Meditations*" in page
 
-    def test_writes_related_topics_as_wikilinks(self, tmp_wiki_dir):
+    def test_writes_related_topics_as_markdown_links(self, tmp_wiki_dir):
         a = TopicFactory(name="Decision Making", slug="decision-making")
         b = TopicFactory(name="Cognitive Bias", slug="cognitive-bias")
         a.related_topics.add(b)
         HighlightFactory(topic=a)
+        HighlightFactory(topic=b)
 
         WikiWriter().write_all()
 
         page = (tmp_wiki_dir / "wiki" / "decision-making.md").read_text()
         assert "## Related Topics" in page
-        assert "[[Cognitive Bias]]" in page
+        # Standard Markdown link, peer-relative path, not [[wikilink]].
+        assert "[Cognitive Bias](cognitive-bias.md)" in page
 
-    def test_writes_index_with_all_topics(self, tmp_wiki_dir):
-        TopicFactory(name="A", slug="a")
-        TopicFactory(name="B", slug="b")
+    def test_writes_index_with_topics_that_have_highlights(self, tmp_wiki_dir):
+        a = TopicFactory(name="A", slug="a")
+        b = TopicFactory(name="B", slug="b")
+        HighlightFactory(topic=a)
+        HighlightFactory(topic=b)
 
         WikiWriter().write_all()
 
         index = (tmp_wiki_dir / "index.md").read_text()
-        assert "[[A]]" in index
-        assert "[[B]]" in index
+        assert "[A](wiki/a.md)" in index
+        assert "[B](wiki/b.md)" in index
+
+    def test_skips_pages_for_related_only_topics(self, tmp_wiki_dir):
+        # Topic with primary highlight earns a page.
+        primary = TopicFactory(name="Courage", slug="courage")
+        HighlightFactory(topic=primary)
+        # Related-only topic — exists as a graph node, has no primary highlights.
+        # (After the classifier fix, the classifier won't create such topics, but
+        # they can still exist if a user adds an edge manually via admin or if a
+        # topic loses its last highlight. The writer must still handle the case.)
+        related_only = TopicFactory(name="Wisdom", slug="wisdom")
+        primary.related_topics.add(related_only)
+
+        WikiWriter().write_all()
+
+        assert (tmp_wiki_dir / "wiki" / "courage.md").exists()
+        assert not (tmp_wiki_dir / "wiki" / "wisdom.md").exists()
+        # The link to Wisdom still appears in courage.md as a Markdown link, even
+        # though its target file doesn't exist — dangling-link pattern.
+        assert "[Wisdom](wisdom.md)" in (tmp_wiki_dir / "wiki" / "courage.md").read_text()
+        # Index lists only topics that earned a page.
+        index = (tmp_wiki_dir / "index.md").read_text()
+        assert "[Courage](wiki/courage.md)" in index
+        assert "wisdom.md" not in index
 
     def test_writes_raw_highlights_file(self, tmp_wiki_dir):
         topic = TopicFactory(name="X", slug="x")
